@@ -7,152 +7,223 @@ using namespace boost::asio::ip;
 using namespace std::placeholders;
 const int RECVSIZE = 1024;
 
-class Session;
-
+// 消息节点类，封装待发送的数据
 class MsgNode
 {
     friend class Session;
 
 public:
+    // 构造函数：从外部复制数据到缓冲区
     MsgNode(const char *msg, int totalLen) : m_totalLen(totalLen), m_curLen(0)
     {
         m_msg = new char[totalLen];
         std::memcpy(m_msg, msg, totalLen);
     }
+
+    // 构造函数：仅分配缓冲区，不复制数据
     MsgNode(int totalLen) : m_totalLen(totalLen), m_curLen(0)
     {
         m_msg = new char[totalLen];
     }
+
+    // 析构函数：释放动态分配的缓冲区
     ~MsgNode()
     {
         delete[] m_msg;
     }
 
 private:
-    int m_totalLen;
-    int m_curLen;
-    char *m_msg;
+    int m_totalLen; // 消息总长度
+    int m_curLen;   // 已发送的长度（用于分段发送）
+    char *m_msg;    // 数据缓冲区
 };
 
+// 会话类，管理TCP连接和数据收发
 class Session
 {
 public:
-    Session(std::shared_ptr<tcp::socket> socket) : m_socket(socket)
+    // 构造函数：接收共享的socket指针
+    Session(std::shared_ptr<tcp::socket> socket) : m_socket(socket), m_sendPending(false), m_recvPending(false)
     {
     }
+
+    // 同步连接到指定端点
     void connect(const tcp::endpoint &ep)
     {
         m_socket->connect(ep);
     }
+
+    // 旧版发送回调函数（存在问题，不建议使用）
     void writeCallBackErr(const boost::system::error_code &ec, std::size_t bytesTransferred, std::shared_ptr<MsgNode> sendNode)
     {
+        // 若未发送完所有数据，继续发送剩余部分
         if (bytesTransferred + sendNode->m_curLen < sendNode->m_totalLen)
         {
             sendNode->m_curLen += bytesTransferred;
             this->m_socket->async_write_some(boost::asio::buffer(sendNode->m_msg + sendNode->m_curLen, sendNode->m_totalLen - sendNode->m_curLen),
                                              std::bind(&Session::writeCallBackErr, this, _1, _2, sendNode));
         }
-        return;
     }
+
+    // 旧版发送函数（存在问题，不建议使用）
     void writeToSocketErr(const std::string buf)
     {
+        // 每次调用覆盖当前发送节点，可能导致数据覆盖
         m_sendNode = std::make_shared<MsgNode>(buf.c_str(), buf.length());
         this->m_socket->async_write_some(boost::asio::buffer(m_sendNode->m_msg, m_sendNode->m_totalLen),
                                          std::bind(&Session::writeCallBackErr, this, _1, _2, m_sendNode));
     }
 
+    // 改进的异步发送函数（推荐使用）
     void WriteToSocket(const std::string &buf)
     {
-        // 插入发送队列
+        // 将消息封装为节点并加入发送队列
         auto node = std::make_shared<MsgNode>(buf.c_str(), buf.length());
         m_sendQueue.emplace(node);
-        // pending状态说明上一次有未发送完的数据
+
+        // 若已有未完成的发送操作，则不启动新的发送
         if (m_sendPending == true)
         {
             return;
         }
-        // 异步发送数据，因为异步所以不会一下发送完
+
+        // 启动异步发送（注意：async_write_some可能只发送部分数据）
         this->m_socket->async_write_some(boost::asio::buffer(buf), std::bind(&Session::WriteCallBack, this, _1, _2));
-        m_sendPending = true;
+        m_sendPending = true; // 标记有活跃的发送操作
     }
-    void Session::WriteCallBack(const boost::system::error_code &ec, std::size_t bytes_transferred)
+
+    // 改进的发送回调函数
+    void WriteCallBack(const boost::system::error_code &ec, std::size_t bytesTransfered)
     {
+        // 检查错误
         if (ec.value() != 0)
         {
-            std::cout << "Error , code is " << ec.value() << " . Message is " << ec.message();
+            std::cout << "发送错误, 错误码: " << ec.value() << " 错误信息: " << ec.message();
             return;
         }
-        // 取出队首元素即当前未发送完数据
+
+        // 获取队首元素（当前正在发送的消息）
         auto &send_data = m_sendQueue.front();
-        send_data->m_curLen += bytes_transferred;
-        // 数据未发送完， 则继续发送
+        send_data->m_curLen += bytesTransfered;
+
+        // 若数据未发送完，则继续发送剩余部分
         if (send_data->m_curLen < send_data->m_totalLen)
         {
             this->m_socket->async_write_some(boost::asio::buffer(send_data->m_msg + send_data->m_curLen, send_data->m_totalLen - send_data->m_curLen),
-                                             std::bind(&Session::WriteCallBack,
-                                                       this, _1, _2));
+                                             std::bind(&Session::WriteCallBack, this, _1, _2));
             return;
         }
-        // 如果发送完，则pop出队首元素
+
+        // 若发送完成，则从队列中移除当前消息
         m_sendQueue.pop();
-        // 如果队列为空，则说明所有数据都发送完,将pending设置为false
+
+        // 若队列为空，标记无活跃发送操作
         if (m_sendQueue.empty())
         {
             m_sendPending = false;
         }
-        // 如果队列不是空，则继续将队首元素发送
+
+        // 若队列非空，继续发送下一条消息
         if (!m_sendQueue.empty())
         {
             auto &send_data = m_sendQueue.front();
             this->m_socket->async_write_some(boost::asio::buffer(send_data->m_msg + send_data->m_curLen, send_data->m_totalLen - send_data->m_curLen),
-                                             std::bind(&Session::WriteCallBack,
-                                                       this, _1, _2));
+                                             std::bind(&Session::WriteCallBack, this, _1, _2));
         }
     }
-        // 不能与async_write_some混合使用
-        void WriteAllToSocket(const std::string &buf)
+
+    // 使用async_send的发送函数（注意：async_send可能不是标准函数，存在问题）
+    void WriteAllToSocket(const std::string &buf)
+    {
+        // 将消息加入发送队列
+        m_sendQueue.emplace(new MsgNode(buf.c_str(), buf.length()));
+
+        // 若已有未完成的发送操作，则不启动新的发送
+        if (m_sendPending)
         {
-            // 插入发送队列
-            m_sendQueue.emplace(new MsgNode(buf.c_str(), buf.length()));
-            // pending状态说明上一次有未发送完的数据
-            if (m_sendPending)
-            {
-                return;
-            }
-            // 异步发送数据，因为异步所以不会一下发送完
-            this->m_socket->async_send(boost::asio::buffer(buf),
-                                       std::bind(&Session::WriteAllCallBack, this,
-                                                 _1, _2));
-            m_sendPending = true;
+            return;
         }
-        void WriteAllCallBack(const boost::system::error_code &ec, std::size_t bytes_transferred)
+
+        // 启动异步发送（注意：async_send可能不是标准函数，可能是async_write的误用）
+        this->m_socket->async_send(boost::asio::buffer(buf),
+                                   std::bind(&Session::WriteAllCallBack, this, _1, _2));
+        m_sendPending = true;
+    }
+
+    // async_send的回调函数
+    void WriteAllCallBack(const boost::system::error_code &ec, std::size_t bytesTransfered)
+    {
+        // 检查错误
+        if (ec.value() != 0)
         {
-            if (ec.value() != 0)
-            {
-                std::cout << "Error occured! Error code = "
-                          << ec.value()
-                          << ". Message: " << ec.message();
-                return;
-            }
-            // 如果发送完，则pop出队首元素
-            m_sendQueue.pop();
-            // 如果队列为空，则说明所有数据都发送完,将pending设置为false
-            if (m_sendQueue.empty())
-            {
-                m_sendPending = false;
-            }
-            // 如果队列不是空，则继续将队首元素发送
-            if (!m_sendQueue.empty())
-            {
-                auto &send_data = m_sendQueue.front();
-                this->m_socket->async_send(boost::asio::buffer(send_data->m_msg + send_data->m_curLen, send_data->m_totalLen - send_data->m_curLen),
-                                           std::bind(&Session::WriteAllCallBack,
-                                                     this, _1, _2));
-            }
+            std::cout << "发送错误! 错误码 = " << ec.value() << ". 错误信息: " << ec.message();
+            return;
         }
+
+        // 假设所有数据已发送完成，从队列中移除当前消息
+        m_sendQueue.pop();
+
+        // 若队列为空，标记无活跃发送操作
+        if (m_sendQueue.empty())
+        {
+            m_sendPending = false;
+        }
+
+        // 若队列非空，继续发送下一条消息
+        if (!m_sendQueue.empty())
+        {
+            auto &send_data = m_sendQueue.front();
+            this->m_socket->async_send(boost::asio::buffer(send_data->m_msg + send_data->m_curLen, send_data->m_totalLen - send_data->m_curLen),
+                                       std::bind(&Session::WriteAllCallBack, this, _1, _2));
+        }
+    }
+    void readFromSocket()
+    {
+        if (m_recvPending == true)
+        {
+            return;
+        }
+        m_recvNode = std::make_shared<MsgNode>(RECVSIZE);
+        m_socket->async_read_some(boost::asio::buffer(m_recvNode->m_msg, m_recvNode->m_totalLen),
+                                  std::bind(&Session::readCallBack, this, _1, _2));
+        m_recvPending = true;
+    }
+    void readCallBack(const boost::system::error_code &ec, std::size_t bytesTransfered)
+    {
+        m_recvNode->m_curLen += bytesTransfered;
+        if (m_recvNode->m_curLen < m_recvNode->m_totalLen)
+        {
+            m_socket->async_read_some(boost::asio::buffer(m_recvNode->m_msg + m_recvNode->m_curLen, m_recvNode->m_totalLen - m_recvNode->m_curLen),
+                                      std::bind(&Session::readCallBack, this, _1, _2));
+            return;
+        }
+        m_recvPending = false;
+        m_recvNode = nullptr;
+    }
+
+    void readAllFromSocket()
+    {
+        if (m_recvPending == true)
+        {
+            return;
+        }
+        m_recvNode = std::make_shared<MsgNode>(RECVSIZE);
+        this->m_socket->async_receive(boost::asio::buffer(m_recvNode->m_msg, m_recvNode->m_totalLen),
+                                      std::bind(&Session::readAllCallBack, this, _1, _2));
+        m_recvPending = true;
+    }
+    void readAllCallBack(const boost::system::error_code &ec, std::size_t bytesTransfered)
+    {
+        m_recvNode->m_curLen += bytesTransfered;
+        m_recvPending = false;
+        m_recvNode = nullptr;
+    }
+
 private:
-    std::shared_ptr<tcp::socket> m_socket;
-    std::shared_ptr<MsgNode> m_sendNode;
-    std::queue<std::shared_ptr<MsgNode>> m_sendQueue;
-    bool m_sendPending;
+    std::shared_ptr<tcp::socket> m_socket;            // 共享的TCP套接字
+    std::shared_ptr<MsgNode> m_sendNode;              // 当前发送节点（用于旧版接口）
+    std::queue<std::shared_ptr<MsgNode>> m_sendQueue; // 发送消息队列
+    std::shared_ptr<MsgNode> m_recvNode;
+    bool m_sendPending; // 标记是否有未完成的发送操作
+    bool m_recvPending;
 };
