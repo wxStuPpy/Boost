@@ -14,7 +14,7 @@ class MsgNode
     friend class CSession;
 
 public:
-    MsgNode(char *msg, int max_len)
+    MsgNode(char *msg, int max_len) : _cur_len(0)
     {
         _data = new char[max_len];
         memcpy(_data, msg, max_len);
@@ -30,27 +30,27 @@ private:
     char *_data;
 };
 
-class Session;
+class CSession;
 
 class Server
 {
 public:
     Server(boost::asio::io_context &ioc, short port);
-    void clearSession(std::string uuid); // 声明成员函数
+    void clearCSession(std::string uuid); // 声明成员函数
 
 private:
     void startAccept();
-    void handleAccept(std::shared_ptr<Session> newSession, const boost::system::error_code &error);
+    void handleAccept(std::shared_ptr<CSession> newCSession, const boost::system::error_code &error);
 
     boost::asio::io_context &_ioc;
     tcp::acceptor _acceptor;
-    std::map<std::string, std::shared_ptr<Session>> _sessions;
+    std::map<std::string, std::shared_ptr<CSession>> _CSessions;
 };
 
-class Session : public std::enable_shared_from_this<Session>
+class CSession : public std::enable_shared_from_this<CSession>
 {
 public:
-    Session(boost::asio::io_context &ioc, Server *server) : _socket(ioc), _server(server)
+    CSession(boost::asio::io_context &ioc, Server *server) : _socket(ioc), _server(server)
     {
         boost::uuids::uuid a_uuid = boost::uuids::random_generator()();
         _uuid = boost::uuids::to_string(a_uuid);
@@ -61,8 +61,8 @@ public:
     void Start();
 
 private:
-    void handleRead(const boost::system::error_code &error, size_t bytes_transfered, std::shared_ptr<Session> selfShared);
-    void handleWrite(const boost::system::error_code &error, std::shared_ptr<Session> selfShared);
+    void handleRead(const boost::system::error_code &error, size_t bytes_transfered, std::shared_ptr<CSession> selfShared);
+    void handleWrite(const boost::system::error_code &error, std::shared_ptr<CSession> selfShared);
     void send(char *msg, int max_length);
     tcp::socket _socket;
     enum
@@ -82,24 +82,24 @@ Server::Server(boost::asio::io_context &ioc, short port)
     startAccept();
 }
 
-void Server::clearSession(std::string uuid)
+void Server::clearCSession(std::string uuid)
 {
-    _sessions.erase(uuid);
+    _CSessions.erase(uuid);
 }
 
 void Server::startAccept()
 {
-    auto newSession = std::make_shared<Session>(_ioc, this);
-    _acceptor.async_accept(newSession->Socket(),
-                           std::bind(&Server::handleAccept, this, newSession, _1));
+    auto newCSession = std::make_shared<CSession>(_ioc, this);
+    _acceptor.async_accept(newCSession->Socket(),
+                           std::bind(&Server::handleAccept, this, newCSession, _1));
 }
 
-void Server::handleAccept(std::shared_ptr<Session> newSession, const boost::system::error_code &error)
+void Server::handleAccept(std::shared_ptr<CSession> newCSession, const boost::system::error_code &error)
 {
     if (!error)
     {
-        newSession->Start();
-        _sessions[newSession->getUuid()] = newSession;
+        newCSession->Start();
+        _CSessions[newCSession->getUuid()] = newCSession;
     }
     else
     {
@@ -108,41 +108,64 @@ void Server::handleAccept(std::shared_ptr<Session> newSession, const boost::syst
     startAccept();
 }
 
-void Session::Start()
+void CSession::Start()
 {
     memset(_data, 0, max_length);
     _socket.async_read_some(boost::asio::buffer(_data, max_length),
-                            std::bind(&Session::handleRead, this, _1, _2, shared_from_this()));
+                            std::bind(&CSession::handleRead, this, _1, _2, shared_from_this()));
 }
 
-void Session::handleRead(const boost::system::error_code &error, size_t bytes_transfered, std::shared_ptr<Session> selfShared)
+void CSession::handleRead(const boost::system::error_code &error, size_t bytes_transfered, std::shared_ptr<CSession> selfShared)
 {
     if (!error)
     {
         std::cout << "server receive data is " << _data << std::endl;
-        boost::asio::async_write(_socket, boost::asio::buffer(_data, bytes_transfered),
-                                 std::bind(&Session::handleWrite, this, _1, selfShared));
+        send(_data, bytes_transfered);
+        std::memset(_data, 0, max_length);
+        _socket.async_read_some(boost::asio::buffer(_data, bytes_transfered),
+                                std::bind(&CSession::handleRead, this, _1, _2, selfShared));
     }
     else
     {
         std::cerr << "read error: " << error.message() << std::endl;
-        _server->clearSession(_uuid); // 合法：Server的clearSession已声明
+        _server->clearCSession(_uuid);
     }
 }
 
-void Session::handleWrite(const boost::system::error_code &error, std::shared_ptr<Session> selfShared)
+void CSession::handleWrite(const boost::system::error_code &error, std::shared_ptr<CSession> selfShared)
 {
     if (!error)
     {
-        memset(_data, 0, max_length);
-        _socket.async_read_some(boost::asio::buffer(_data, max_length),
-                                std::bind(&Session::handleRead, this, _1, _2, selfShared));
+        std::lock_guard<std::mutex> lock(_sendMutex);
+        _sendQueue.pop();
+        if (!_sendQueue.empty())
+        {
+            auto &msgNode = _sendQueue.front();
+            boost::asio::async_write(_socket, boost::asio::buffer(msgNode->_data, msgNode->_max_len), std::bind(&CSession::handleWrite, this, _1, selfShared));
+        }
     }
     else
     {
         std::cerr << "write error: " << error.message() << std::endl;
-        _server->clearSession(_uuid); // 合法
+        _server->clearCSession(_uuid);
     }
+}
+
+void CSession::send(char *msg, int max_length)
+{
+    bool pending = false;
+    std::lock_guard<std::mutex> lock(_sendMutex);
+    if (_sendQueue.size() > 0)
+    {
+        pending = true;
+    }
+    _sendQueue.push(std::make_shared<MsgNode>(msg, max_length));
+    if (pending == true)
+    {
+        return;
+    }
+    boost::asio::async_write(_socket, boost::asio::buffer(msg, max_length),
+                             std::bind(&CSession::handleWrite, this, _1, shared_from_this()));
 }
 
 int main()
