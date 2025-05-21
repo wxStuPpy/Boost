@@ -3,9 +3,32 @@
 #include <map>
 #include <boost/uuid/uuid_io.hpp>
 #include <boost/uuid/uuid_generators.hpp>
+#include <queue>
+#include <mutex>
 
 using namespace boost::asio::ip;
 using namespace std::placeholders;
+
+class MsgNode
+{
+    friend class CSession;
+
+public:
+    MsgNode(char *msg, int max_len)
+    {
+        _data = new char[max_len];
+        memcpy(_data, msg, max_len);
+    }
+    ~MsgNode()
+    {
+        delete[] _data;
+    }
+
+private:
+    int _cur_len;
+    int _max_len;
+    char *_data;
+};
 
 class Session;
 
@@ -13,7 +36,7 @@ class Server
 {
 public:
     Server(boost::asio::io_context &ioc, short port);
-    void clearSession(std::string uuid); 
+    void clearSession(std::string uuid); // 声明成员函数
 
 private:
     void startAccept();
@@ -40,7 +63,7 @@ public:
 private:
     void handleRead(const boost::system::error_code &error, size_t bytes_transfered, std::shared_ptr<Session> selfShared);
     void handleWrite(const boost::system::error_code &error, std::shared_ptr<Session> selfShared);
-
+    void send(char *msg, int max_length);
     tcp::socket _socket;
     enum
     {
@@ -49,6 +72,8 @@ private:
     char _data[max_length];
     Server *_server;
     std::string _uuid;
+    std::queue<std::shared_ptr<MsgNode>> _sendQueue;
+    std::mutex _sendMutex;
 };
 
 Server::Server(boost::asio::io_context &ioc, short port)
@@ -101,7 +126,7 @@ void Session::handleRead(const boost::system::error_code &error, size_t bytes_tr
     else
     {
         std::cerr << "read error: " << error.message() << std::endl;
-        _server->clearSession(_uuid); 
+        _server->clearSession(_uuid); // 合法：Server的clearSession已声明
     }
 }
 
@@ -116,7 +141,7 @@ void Session::handleWrite(const boost::system::error_code &error, std::shared_pt
     else
     {
         std::cerr << "write error: " << error.message() << std::endl;
-        _server->clearSession(_uuid); 
+        _server->clearSession(_uuid); // 合法
     }
 }
 
