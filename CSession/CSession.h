@@ -61,11 +61,12 @@ public:
     std::string getUuid()const;
     void Start();
     void close();
+    void send(char *msg, int max_length);
 
 private:
     void handleRead(const boost::system::error_code &error, size_t bytes_transfered, std::shared_ptr<CSession> selfShared);
     void handleWrite(const boost::system::error_code &error, std::shared_ptr<CSession> selfShared);
-    void send(char *msg, int max_length);
+
     tcp::socket _socket;
     char _data[MAX_LENGTH];
     Server *_server;

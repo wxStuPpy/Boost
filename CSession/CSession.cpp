@@ -58,19 +58,18 @@ void CSession::handleWrite(const boost::system::error_code &error, std::shared_p
 
 void CSession::send(char *msg, int max_length)
 {
-    std::lock_guard<std::mutex> lock(_sendMutex);
-    if (_sendQueue.size() > MAX_QUEUE_SIZE)
-    {
-        std::cout << "session:" << _uuid << "send que fulled ,size is" << MAX_QUEUE_SIZE << std::endl;
-        return;
-    }
-    _sendQueue.push(std::make_shared<MsgNode>(msg, max_length));
-    if (_sendQueue.size() > 0)
-    {
-        return;
-    }
-    boost::asio::async_write(_socket, boost::asio::buffer(msg, max_length),
-                             std::bind(&CSession::handleWrite, this, _1, shared_from_this()));
+    bool pending = false;
+	std::lock_guard<std::mutex> lock(_sendMutex);
+	if (_sendQueue.size() > 0) {
+		pending = true;
+	}
+	_sendQueue.push(std::make_shared<MsgNode>(msg, max_length));
+	if (pending) {
+		return;
+	}
+	auto& msgnode = _sendQueue.front();
+	boost::asio::async_write(_socket, boost::asio::buffer(msgnode->_data, msgnode->_totalLen), 
+		std::bind(&CSession::handleWrite, this, _1, shared_from_this()));
 }
 
 void CSession::handleRead(const boost::system::error_code &error, size_t bytes_transferred, std::shared_ptr<CSession> selfShared)
@@ -208,6 +207,7 @@ void CSession::handleRead(const boost::system::error_code &error, size_t bytes_t
                     memset(_data, 0, MAX_LENGTH); // 清空当前数据缓冲区
                     _socket.async_read_some(boost::asio::buffer(_data, MAX_LENGTH),
                                             std::bind(&CSession::handleRead, this, _1, _2, selfShared));
+                 return;
                 }
             }
         }
