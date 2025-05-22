@@ -1,0 +1,1 @@
+/usr/bin/c++  -g -Wall -std=c++14 CMakeFiles/server.dir/CSession.cpp.o CMakeFiles/server.dir/Server.cpp.o CMakeFiles/server.dir/main.cpp.o -o server 

@@ -7,4 +7,9 @@ CSession:CSession.cpp
 	-./$@ 
 	-rm ./$@
 
+tlv:tlv.cpp
+	-${CXX} $^ ${CXXFLAGS} -o $@
+	-./$@ 
+	-rm ./$@
+
 
