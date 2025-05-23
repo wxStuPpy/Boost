@@ -16,7 +16,7 @@ void Server::clearCSession(std::string uuid)
 void Server::startAccept()
 {
     auto newCSession = std::make_shared<CSession>(_ioc, this);
-    _acceptor.async_accept(newCSession->Socket(),
+    _acceptor.async_accept(newCSession->getSocket(),
                            std::bind(&Server::handleAccept, this, newCSession, _1));
 }
 

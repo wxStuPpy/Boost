@@ -1,8 +1,12 @@
+#pragma once
 #include <iostream>
 #include "const.h"
 
+class CSession;
+
 class MsgNode
 {
+    friend class CSession;
 public:
     MsgNode(short len);
     ~MsgNode();
@@ -17,7 +21,7 @@ protected:
 class RecvNode : public MsgNode
 {
 public:
-    RecvNode(short len, short msgId);
+    RecvNode(short len, short msgId=-1);
 
 private:
     short _msgId;
