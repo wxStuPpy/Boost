@@ -1,6 +1,9 @@
 #include <iostream>
 #include <boost/asio.hpp>
 #include <thread>
+#include <nlohmann/json.hpp>
+
+using nlohmann::json;
 using namespace std;
 using namespace boost::asio::ip;
 const int MAX_LENGTH = 1024 * 2;
@@ -23,13 +26,16 @@ int main()
 		thread send_thread([&sock] {
 			for (;;) {
 				this_thread::sleep_for(std::chrono::milliseconds(2000));
-				const char* request = "hello world!";
-				short request_length = strlen(request);
+				json js;
+				js["id"]=1;
+				js["data"]="hello world";
+				std::string request=js.dump();
+				short request_length = strlen(request.c_str());
 				char send_data[MAX_LENGTH] = { 0 };
 				//转为网络字节序
 				short request_host_length = boost::asio::detail::socket_ops::host_to_network_short(request_length);
 				memcpy(send_data, &request_host_length, 2);
-				memcpy(send_data + 2, request, request_length);
+				memcpy(send_data + 2, request.c_str(), request_length);
 				boost::asio::write(sock, boost::asio::buffer(send_data, request_length + 2));
 			}
 			});
@@ -45,12 +51,9 @@ int main()
 				//转为本地字节序
 				msglen = boost::asio::detail::socket_ops::network_to_host_short(msglen);
 				char msg[MAX_LENGTH] = { 0 };
-				boost::asio::read(sock, boost::asio::buffer(msg, msglen));
-
-				std::cout << "Reply is: ";
-				std::cout.write(msg, msglen) << endl;
-				std::cout << "Reply len is " << msglen;
-				std::cout << "\n";
+				size_t msg_lenght=boost::asio::read(sock, boost::asio::buffer(msg, msglen));
+				json js=json::parse(std::string(msg,msg_lenght));
+				std::cout<<"id is "<<js["id"]<<" msg is "<<js["data"]<<std::endl;	
 			}
 			});
 

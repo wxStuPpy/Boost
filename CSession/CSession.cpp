@@ -1,4 +1,7 @@
 #include "CSession.h"
+#include <nlohmann/json.hpp>
+
+using nlohmann::json;
 
 CSession::CSession(boost::asio::io_context &ioc, Server *server) : _socket(ioc), _server(server), _isHeadParse(false), _isClose(false)
 {
@@ -56,20 +59,22 @@ void CSession::handleWrite(const boost::system::error_code &error, std::shared_p
     }
 }
 
-void CSession::send(char *msg, int max_length)
+void CSession::send(std::string msg)
 {
     bool pending = false;
-	std::lock_guard<std::mutex> lock(_sendMutex);
-	if (_sendQueue.size() > 0) {
-		pending = true;
-	}
-	_sendQueue.push(std::make_shared<MsgNode>(msg, max_length));
-	if (pending) {
-		return;
-	}
-	auto& msgnode = _sendQueue.front();
-	boost::asio::async_write(_socket, boost::asio::buffer(msgnode->_data, msgnode->_totalLen), 
-		std::bind(&CSession::handleWrite, this, _1, shared_from_this()));
+    std::lock_guard<std::mutex> lock(_sendMutex);
+    if (_sendQueue.size() > 0)
+    {
+        pending = true;
+    }
+    _sendQueue.push(std::make_shared<MsgNode>(const_cast<char*>(msg.c_str()), msg.length()));
+    if (pending)
+    {
+        return;
+    }
+    auto &msgnode = _sendQueue.front();
+    boost::asio::async_write(_socket, boost::asio::buffer(msgnode->_data, msgnode->_totalLen),
+                             std::bind(&CSession::handleWrite, this, _1, shared_from_this()));
 }
 
 void CSession::handleRead(const boost::system::error_code &error, size_t bytes_transferred, std::shared_ptr<CSession> selfShared)
@@ -145,10 +150,11 @@ void CSession::handleRead(const boost::system::error_code &error, size_t bytes_t
 
                 // 终止符处理（假设消息以 '\0' 结尾，根据协议实际情况调整）
                 _recvMsgNode->_data[_recvMsgNode->_totalLen] = '\0';
-                std::cout << "接收到完整消息: " << _recvMsgNode->_data << std::endl;
-
+                json js = json::parse(std::string(_recvMsgNode->_data, _recvMsgNode->_totalLen));
+                std::cout << "接收到完整消息: " << js["id"] << " " << js["data"] << std::endl;
+                //js["data"] = json::array({"server has receieved msg , msg data is", js["data"]});
                 // 业务逻辑：回显消息（示例）
-                send(_recvMsgNode->_data, _recvMsgNode->_totalLen);
+                send(js.dump());
 
                 // 重置状态，准备处理下一条消息
                 _isHeadParse = false;
@@ -192,11 +198,11 @@ void CSession::handleRead(const boost::system::error_code &error, size_t bytes_t
 
                 // 终止符处理（同上）
                 _recvMsgNode->_data[_recvMsgNode->_totalLen] = '\0';
-                std::cout << "接收到完整消息: " << _recvMsgNode->_data << std::endl;
-
+                json js = json::parse(std::string(_recvMsgNode->_data, _recvMsgNode->_totalLen));
+                std::cout << "接收到完整消息: " << js["id"] << " " << js["data"] << std::endl;
+                //js["data"] = json::array({"server has receieved msg , msg data is", js["data"]});
                 // 业务逻辑：回显消息（示例）
-                send(_recvMsgNode->_data, _recvMsgNode->_totalLen);
-
+                send(js.dump());
                 // 重置状态，准备处理下一条消息
                 _isHeadParse = false;
                 _recvMsgHead->clear();
@@ -207,7 +213,7 @@ void CSession::handleRead(const boost::system::error_code &error, size_t bytes_t
                     memset(_data, 0, MAX_LENGTH); // 清空当前数据缓冲区
                     _socket.async_read_some(boost::asio::buffer(_data, MAX_LENGTH),
                                             std::bind(&CSession::handleRead, this, _1, _2, selfShared));
-                 return;
+                    return;
                 }
             }
         }
