@@ -30,7 +30,7 @@ int main()
 				js["id"]=1;
 				js["data"]="hello world";
 				std::string request=js.dump();
-				short request_length = strlen(request.c_str());
+				short request_length = static_cast<short>(request.size());
 				char send_data[MAX_LENGTH] = { 0 };
 				//转为网络字节序
 				short request_host_length = boost::asio::detail::socket_ops::host_to_network_short(request_length);

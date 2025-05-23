@@ -58,13 +58,14 @@ public:
     CSession(boost::asio::io_context &ioc, Server *server);
     ~CSession();
     tcp::socket &Socket();
-    std::string getUuid()const;
+    std::string getUuid() const;
     void Start();
     void close();
     void send(std::string msg);
 
 private:
-    void handleRead(const boost::system::error_code &error, size_t bytes_transfered, std::shared_ptr<CSession> selfShared);
+    void handleReadHead(const boost::system::error_code &error, size_t bytes_transfered, std::shared_ptr<CSession> selfShared);
+    void handleReadBody(const boost::system::error_code &error, size_t bytes_transfered, std::shared_ptr<CSession> selfShared);
     void handleWrite(const boost::system::error_code &error, std::shared_ptr<CSession> selfShared);
 
     tcp::socket _socket;
