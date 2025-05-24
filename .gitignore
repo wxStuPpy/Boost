@@ -1,10 +1,13 @@
 # 忽略所有 .log 文件
 *.log
 
-# 忽略特定目录
+# 忽略 build 和 bin 目录
+build/
+bin/
 
 # 忽略特定文件
 config.ini
 
-!build/.keep  # 示例：在 build 目录中添加空文件 .keep
-!bin/.keep  # 示例：在 build 目录中添加空文件 .keep
+# 保留 build 和 bin 目录中的 .keep 文件（即使父目录被忽略）
+!build/.keep
+!bin/.keep

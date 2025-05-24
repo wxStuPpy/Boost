@@ -1,5 +1,7 @@
 #include "CSession.h"
 #include <nlohmann/json.hpp>
+#include <iostream>
+
 
 using nlohmann::json;
 
@@ -78,6 +80,10 @@ void CSession::send(std::string msg,short msgId)
     auto &msgnode = _sendQueue.front();
     boost::asio::async_write(_socket, boost::asio::buffer(msgnode->_data, msgnode->_totalLen),
                              std::bind(&CSession::handleWrite, this, _1, shared_from_this()));
+}
+
+LogicNode::LogicNode(std::shared_ptr<CSession>session,std::shared_ptr<RecvNode>recvnode):_session(session),_recvNode(recvnode){
+    
 }
 
 void CSession::handleRead(const boost::system::error_code &error, size_t bytes_transferred, std::shared_ptr<CSession> selfShared)

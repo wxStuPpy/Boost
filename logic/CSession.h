@@ -1,10 +1,9 @@
 #pragma once
 
 #include <boost/asio.hpp>
-#include <iostream>
-#include <map>
 #include <boost/uuid/uuid_io.hpp>
 #include <boost/uuid/uuid_generators.hpp>
+#include <memory>
 #include <queue>
 #include <mutex>
 #include "MsgNode.h"
@@ -43,4 +42,13 @@ private:
     std::shared_ptr<RecvNode> _recvMsgHead;
     bool _isHeadParse;
     bool _isClose;
+};
+
+class LogicNode{
+    friend class LogicSystem;
+public:
+LogicNode(std::shared_ptr<CSession>,std::shared_ptr<RecvNode>);
+private:
+    std::shared_ptr<CSession>_session;
+    std::shared_ptr<RecvNode>_recvNode;
 };
