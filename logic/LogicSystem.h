@@ -11,6 +11,8 @@
 #include <string>
 #include <thread>
 
+class CSession;
+
 using funCallBack =
     function<void(std::shared_ptr<CSession>, const short &msg_id,
                   const std::string &msg_data)>;

@@ -1,37 +1,36 @@
 #pragma once
-#include <iostream>
-#include "const.h"
-
 class CSession;
+class LogicSystem;
 
-class MsgNode
-{
-    friend class CSession;
+class MsgNode {
+  friend class CSession;
+  friend class LogicSystem;
+
 public:
-    MsgNode(short len);
-    ~MsgNode();
-    void clear();
+  MsgNode(short len);
+  ~MsgNode();
+  void clear();
 
 protected:
-    short _curLen;
-    short _totalLen;
-    char *_data;
+  short _curLen;
+  short _totalLen;
+  char *_data;
 };
 
-class RecvNode : public MsgNode
-{
+class RecvNode : public MsgNode {
 public:
-    RecvNode(short len, short msgId=-1);
+  RecvNode(short len, short msgID = -1);
+  short getMsgID() const;
 
 private:
-    short _msgId;
+  short _msgID;
 };
 
-class SendNode : public MsgNode
-{
+class SendNode : public MsgNode {
 public:
-    SendNode(const char *msg, short len, short msgId);
+  SendNode(const char *msg, short len, short msgID);
+  short getMsgID() const;
 
 private:
-    short _msgId;
+  short _msgID;
 };

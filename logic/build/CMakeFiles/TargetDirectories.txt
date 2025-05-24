@@ -1,3 +1,0 @@
-/home/ywx/study/boost/logic/build/CMakeFiles/server.dir
-/home/ywx/study/boost/logic/build/CMakeFiles/edit_cache.dir
-/home/ywx/study/boost/logic/build/CMakeFiles/rebuild_cache.dir
