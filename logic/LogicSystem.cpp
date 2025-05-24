@@ -51,10 +51,11 @@ void LogicSystem::dealMsg() {
     }
     /*队列不为空 且未停止*/
     auto msgNode = _msgQueue.front();
-    std::cout << "recv msg id is" << msgNode->_recvNode->getMsgID()
+    std::cout << "recv msg id is " << msgNode->_recvNode->getMsgID()
               << std::endl;
     auto callBackIter = _funCallBacks.find(msgNode->_recvNode->getMsgID());
     if (callBackIter != _funCallBacks.end()) {
+      std::cout<<"callback"<<std::endl;
       /*调用回调函数*/
       callBackIter->second(
           msgNode->_session, msgNode->_recvNode->getMsgID(),
@@ -68,6 +69,7 @@ void LogicSystem::postMsgToQueue(std::shared_ptr<LogicNode> msg) {
   std::unique_lock<std::mutex> unique_lk(_mutex);
   _msgQueue.push(msg);
   if (_msgQueue.size() == 1) {
+    unique_lk.unlock();
     _cv.notify_one();
   }
 }

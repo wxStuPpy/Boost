@@ -19,7 +19,7 @@ protected:
 
 class RecvNode : public MsgNode {
 public:
-  RecvNode(short len, short msgID = -1);
+  RecvNode(short len, short msgID = 1001);
   short getMsgID() const;
 
 private:
