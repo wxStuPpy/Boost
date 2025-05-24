@@ -71,3 +71,10 @@ void LogicSystem::postMsgToQueue(std::shared_ptr<LogicNode> msg) {
     _cv.notify_one();
   }
 }
+
+LogicSystem::~LogicSystem(){
+  _isStop=true;
+  /*唤醒消费者线程*/
+  _cv.notify_one();
+  _workerThread.join();
+}

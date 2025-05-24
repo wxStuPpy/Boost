@@ -1,5 +1,7 @@
 #include "CSession.h"
+#include "LogicSystem.h"
 #include <iostream>
+#include <memory>
 #include <nlohmann/json.hpp>
 
 using nlohmann::json;
@@ -162,6 +164,7 @@ void CSession::handleRead(const boost::system::error_code &error,
 
         // 终止符处理（假设消息以 '\0' 结尾，根据协议实际情况调整）
         _recvMsgNode->_data[_recvMsgNode->_totalLen] = '\0';
+#if 0
         json js = json::parse(
             std::string(_recvMsgNode->_data, _recvMsgNode->_totalLen));
         std::cout << "接收到完整消息: " << js["id"] << " " << js["data"]
@@ -170,6 +173,9 @@ void CSession::handleRead(const boost::system::error_code &error,
         // js["data"]});
         //  业务逻辑：回显消息（示例）
         send(js.dump(), js["id"]);
+#endif
+        LogicSystem::getInstance()->postMsgToQueue(
+            std::make_shared<LogicNode>(shared_from_this(), _recvMsgNode));
 
         // 重置状态，准备处理下一条消息
         _isHeadParse = false;
@@ -214,6 +220,7 @@ void CSession::handleRead(const boost::system::error_code &error,
 
         // 终止符处理（同上）
         _recvMsgNode->_data[_recvMsgNode->_totalLen] = '\0';
+#if 0
         json js = json::parse(
             std::string(_recvMsgNode->_data, _recvMsgNode->_totalLen));
         std::cout << "接收到完整消息: " << js["id"] << " " << js["data"]
@@ -222,6 +229,9 @@ void CSession::handleRead(const boost::system::error_code &error,
         // js["data"]});
         //  业务逻辑：回显消息（示例）
         send(js.dump(), js["id"]);
+#endif
+        LogicSystem::getInstance()->postMsgToQueue(
+            std::make_shared<LogicNode>(shared_from_this(), _recvMsgNode));
         // 重置状态，准备处理下一条消息
         _isHeadParse = false;
         _recvMsgHead->clear();

@@ -1,5 +1,6 @@
 #include"CSession.h"
 #include"Server.h"
+#include<iostream>
 
 int main()
 {

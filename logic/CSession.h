@@ -1,5 +1,4 @@
 #pragma once
-
 #include "MsgNode.h"
 #include "Server.h"
 #include "const.h"

@@ -11,19 +11,15 @@
 #include <string>
 #include <thread>
 
-class CSession;
-
 using funCallBack =
     function<void(std::shared_ptr<CSession>, const short &msg_id,
                   const std::string &msg_data)>;
 
 class LogicSystem : public Singleton<LogicSystem> {
   friend class Singleton<LogicSystem>;
-
 public:
-  ~LogicSystem() { std::cout << "destruct LogicSystem" << std::endl; }
+  ~LogicSystem();
   void postMsgToQueue(std::shared_ptr<LogicNode> msg);
-
 private:
   LogicSystem();
   void regCallBack();
