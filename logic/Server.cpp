@@ -1,5 +1,6 @@
 #include "Server.h"
 #include <iostream>
+#include "AsioServicePool.h"
 
 Server::Server(boost::asio::io_context &ioc, short port)
     : _ioc(ioc), _acceptor(ioc, tcp::endpoint(tcp::v4(), port)), _port(port)
@@ -14,7 +15,7 @@ void Server::clearCSession(std::string uuid)
 }
 
 void Server::startAccept()
-{
+{   auto &_ioc=AsioServicePool::getInstance()->getIOService();
     auto newCSession = std::make_shared<CSession>(_ioc, this);
     _acceptor.async_accept(newCSession->getSocket(),
                            std::bind(&Server::handleAccept, this, newCSession, _1));
