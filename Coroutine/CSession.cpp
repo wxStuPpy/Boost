@@ -7,7 +7,8 @@
 using nlohmann::json;
 
 CSession::CSession(boost::asio::io_context &ioc, Server *server)
-    : _socket(ioc), _server(server), _isHeadParse(false), _isClose(false) {
+    : _ioc(ioc), _socket(ioc), _server(server), _isHeadParse(false), _isClose(false)
+{
   boost::uuids::uuid a_uuid = boost::uuids::random_generator()();
   _uuid = boost::uuids::to_string(a_uuid);
   _recvMsgHead = std::make_shared<RecvNode>(HEAD_TOTAL_LEN);
@@ -27,10 +28,11 @@ void CSession::close() {
 }
 
 void CSession::Start() {
-  memset(_data, 0, MAX_LENGTH);
-  _socket.async_read_some(
-      boost::asio::buffer(_data, MAX_LENGTH),
-      std::bind(&CSession::handleRead, this, _1, _2, shared_from_this()));
+  auto shared_this =shared_from_this();
+  //开始协程接收
+  boost::asio::co_spawn(_ioc,[=]()->boost::asio::awaitable<void>{
+
+  },boost::asio::detached);
 }
 
 void CSession::handleWrite(const boost::system::error_code &error,

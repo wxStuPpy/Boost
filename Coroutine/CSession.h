@@ -5,10 +5,14 @@
 #include <boost/asio.hpp>
 #include <boost/uuid/uuid_generators.hpp>
 #include <boost/uuid/uuid_io.hpp>
+#include <boost/asio/co_spawn.hpp>
+#include <boost/asio/detached.hpp>
+#include <boost/asio/awaitable.hpp> 
 #include <memory>
 #include <mutex>
 #include <queue>
 
+namespace this_coro=boost::asio::this_coro;
 using namespace boost::asio::ip;
 using namespace std::placeholders;
 
@@ -43,6 +47,7 @@ private:
   std::shared_ptr<RecvNode> _recvMsgHead;
   bool _isHeadParse;
   bool _isClose;
+  boost::asio::io_context& _ioc;
 };
 
 class LogicNode {
