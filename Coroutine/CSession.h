@@ -29,12 +29,9 @@ public:
   void send(std::string msg, short msgID);
 
 private:
-  void handleRead(const boost::system::error_code &error,
-                  size_t bytes_transfered,
-                  std::shared_ptr<CSession> selfShared);
   void handleWrite(const boost::system::error_code &error,
                    std::shared_ptr<CSession> selfShared);
-
+  boost::asio::io_context& _ioc;
   tcp::socket _socket;
   char _data[MAX_LENGTH];
   Server *_server;
@@ -47,7 +44,6 @@ private:
   std::shared_ptr<RecvNode> _recvMsgHead;
   bool _isHeadParse;
   bool _isClose;
-  boost::asio::io_context& _ioc;
 };
 
 class LogicNode {
